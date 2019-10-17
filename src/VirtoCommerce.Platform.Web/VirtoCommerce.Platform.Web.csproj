@@ -12,6 +12,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="AspNet.Security.OAuth.Introspection" Version="2.0.0" />
         <PackageReference Include="AspNet.Security.OAuth.Validation" Version="2.0.0" />
         <PackageReference Include="GitVersionTask" Version="5.0.1">
           <PrivateAssets>all</PrivateAssets>

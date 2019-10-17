@@ -228,7 +228,9 @@ namespace Mvc.Server
                 }.Intersect(request.GetScopes()));
             }
 
-            ticket.SetResources("resource_server");
+            //server
+            // The resources must exactly match the client_id assigned to your resource servers using the introspection handler:
+            ticket.SetResources("resource_server", "api2");
 
             // Note: by default, claims are NOT automatically included in the access and identity tokens.
             // To allow OpenIddict to serialize them, you must attach them a destination, that specifies

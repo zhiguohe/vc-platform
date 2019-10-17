@@ -1,8 +1,10 @@
+using System;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using AspNet.Security.OpenIdConnect.Primitives;
+using AspNet.Security.OpenIdConnect.Server;
 using Hangfire;
 using Hangfire.Common;
 using Hangfire.MemoryStorage;
@@ -21,6 +23,9 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using OpenIddict.Abstractions;
+using OpenIddict.Core;
+using OpenIddict.EntityFrameworkCore.Models;
 using VirtoCommerce.Platform.Assets.AzureBlobStorage;
 using VirtoCommerce.Platform.Assets.AzureBlobStorage.Extensions;
 using VirtoCommerce.Platform.Assets.FileSystem;
@@ -76,7 +81,7 @@ namespace VirtoCommerce.Platform.Web
             {
                 options.PlatformTranslationFolderPath = HostingEnvironment.MapPath(options.PlatformTranslationFolderPath);
             });
-                       
+
             PlatformVersion.CurrentVersion = SemanticVersion.Parse(Microsoft.Extensions.PlatformAbstractions.PlatformServices.Default.Application.ApplicationVersion);
 
             services.AddPlatformServices(Configuration);
@@ -137,7 +142,19 @@ namespace VirtoCommerce.Platform.Web
                 options.MinimumSameSitePolicy = SameSiteMode.None;
             });
 
-            var authBuilder = services.AddAuthentication().AddCookie();
+            //client
+            var authBuilder = services.AddAuthentication(
+                    opt => opt.DefaultAuthenticateScheme = OpenIdConnectServerDefaults.AuthenticationScheme)
+                    .AddOAuthIntrospection(options =>
+                {
+                    options.Authority = new Uri("http://localhost:10645/");
+                    options.Audiences.Add("api2");
+                    options.ClientId = "api2";
+                    options.ClientSecret = "388D45FA-B36B-4988-BA59-B187D329C207";
+                    options.RequireHttpsMetadata = !HostingEnvironment.IsDevelopment();
+                    options.CachingPolicy = null; // disable cache
+                })
+                .AddCookie();
             services.AddSecurityServices(options =>
             {
                 options.NonEditableUsers = new[] { "admin" };
@@ -190,64 +207,67 @@ namespace VirtoCommerce.Platform.Web
 
             services.Configure<Core.Security.AuthorizationOptions>(Configuration.GetSection("Authorization"));
             var authorizationOptions = Configuration.GetSection("Authorization").Get<Core.Security.AuthorizationOptions>();
+            // server
             // Register the OpenIddict services.
             // Note: use the generic overload if you need
             // to replace the default OpenIddict entities.
-            services.AddOpenIddict()
-                .AddCore(options =>
-                {
-                    options.UseEntityFrameworkCore()
-                        .UseDbContext<SecurityDbContext>();
-                }).AddServer(options =>
-                {
-                    // Register the ASP.NET Core MVC binder used by OpenIddict.
-                    // Note: if you don't call this method, you won't be able to
-                    // bind OpenIdConnectRequest or OpenIdConnectResponse parameters.
-                    options.UseMvc();
+            //services.AddOpenIddict()
+            //    .AddCore(options =>
+            //    {
+            //        options.UseEntityFrameworkCore()
+            //            .UseDbContext<SecurityDbContext>();
+            //    }).AddServer(options =>
+            //    {
+            //        // Register the ASP.NET Core MVC binder used by OpenIddict.
+            //        // Note: if you don't call this method, you won't be able to
+            //        // bind OpenIdConnectRequest or OpenIdConnectResponse parameters.
+            //        options.UseMvc();
 
-                    // Enable the authorization, logout, token and userinfo endpoints.
-                    options.EnableTokenEndpoint("/connect/token")
-                        .EnableUserinfoEndpoint("/api/security/userinfo");
+            //        // Enable the authorization, logout, token and userinfo endpoints.
+            //        options.EnableTokenEndpoint("/connect/token")
+            //            .EnableIntrospectionEndpoint("/connect/introspect")
+            //            .EnableUserinfoEndpoint("/api/security/userinfo");
 
-                    // Note: the Mvc.Client sample only uses the code flow and the password flow, but you
-                    // can enable the other flows if you need to support implicit or client credentials.
-                    options.AllowPasswordFlow()
-                        .AllowRefreshTokenFlow();
+            //        // Note: the Mvc.Client sample only uses the code flow and the password flow, but you
+            //        // can enable the other flows if you need to support implicit or client credentials.
+            //        options.AllowPasswordFlow()
+            //            .AllowClientCredentialsFlow();
+            //            .AllowRefreshTokenFlow();
 
-                    options.SetRefreshTokenLifetime(authorizationOptions?.RefreshTokenLifeTime);
-                    options.SetAccessTokenLifetime(authorizationOptions?.AccessTokenLifeTime);
+            //        options.SetRefreshTokenLifetime(authorizationOptions?.RefreshTokenLifeTime);
+            //        options.SetAccessTokenLifetime(authorizationOptions?.AccessTokenLifeTime);
 
-                    options.AcceptAnonymousClients();
+            //        options.AcceptAnonymousClients();
 
-                    // Configure Openiddict to issues new refresh token for each token refresh request.
-                    options.UseRollingTokens();
+            //        // Configure Openiddict to issues new refresh token for each token refresh request.
+            //        options.UseRollingTokens();
 
-                    // Make the "client_id" parameter mandatory when sending a token request.
-                    //options.RequireClientIdentification();
+            //        // Make the "client_id" parameter mandatory when sending a token request.
+            //        //options.RequireClientIdentification();
 
-                    // When request caching is enabled, authorization and logout requests
-                    // are stored in the distributed cache by OpenIddict and the user agent
-                    // is redirected to the same page with a single parameter (request_id).
-                    // This allows flowing large OpenID Connect requests even when using
-                    // an external authentication provider like Google, Facebook or Twitter.
-                    options.EnableRequestCaching();
+            //        // When request caching is enabled, authorization and logout requests
+            //        // are stored in the distributed cache by OpenIddict and the user agent
+            //        // is redirected to the same page with a single parameter (request_id).
+            //        // This allows flowing large OpenID Connect requests even when using
+            //        // an external authentication provider like Google, Facebook or Twitter.
+            //        options.EnableRequestCaching();
 
-                    options.UseReferenceTokens();
-                    options.DisableScopeValidation();
+            //        options.UseReferenceTokens();
+            //        options.DisableScopeValidation();
 
-                    // During development, you can disable the HTTPS requirement.
-                    if (HostingEnvironment.IsDevelopment())
-                    {
-                        options.DisableHttpsRequirement();
-                    }
+            //        // During development, you can disable the HTTPS requirement.
+            //        if (HostingEnvironment.IsDevelopment())
+            //        {
+            //            options.DisableHttpsRequirement();
+            //        }
 
-                    // Note: to use JWT access tokens instead of the default
-                    // encrypted format, the following lines are required:
-                    //
-                    //options.UseJsonWebTokens();
-                    //TODO: Replace to X.509 certificate
-                    //options.AddEphemeralSigningKey();
-                }).AddValidation(options => options.UseReferenceTokens());
+            //        // Note: to use JWT access tokens instead of the default
+            //        // encrypted format, the following lines are required:
+            //        //
+            //        //options.UseJsonWebTokens();
+            //        //TODO: Replace to X.509 certificate
+            //        //options.AddEphemeralSigningKey();
+            //    }).AddValidation(options => options.UseReferenceTokens());
 
             services.Configure<IdentityOptions>(Configuration.GetSection("IdentityOptions"));
 
@@ -283,7 +303,7 @@ namespace VirtoCommerce.Platform.Web
 
             services.Configure<ExternalModuleCatalogOptions>(Configuration.GetSection("ExternalModules"));
             services.AddExternalModules();
-                        
+
             //Add SignalR for push notifications
             services.AddSignalR();
 
@@ -412,6 +432,42 @@ namespace VirtoCommerce.Platform.Web
 
             var mvcJsonOptions = app.ApplicationServices.GetService<IOptions<MvcJsonOptions>>();
             JobHelper.SetSerializerSettings(mvcJsonOptions.Value.SerializerSettings);
+
+            // server
+            // Seed the database with the sample application.
+            // Note: in a real world application, this step should be part of a setup script.
+            //InitializeAsync(app.ApplicationServices).GetAwaiter().GetResult();
+        }
+
+        private async Task InitializeAsync(IServiceProvider services)
+        {
+            // Create a new service scope to ensure the database context is correctly disposed when this methods returns.
+            using (var scope = services.GetRequiredService<IServiceScopeFactory>().CreateScope())
+            {
+                var context = scope.ServiceProvider.GetRequiredService<SecurityDbContext>();
+                await context.Database.EnsureCreatedAsync();
+
+                var manager = scope.ServiceProvider.GetRequiredService<OpenIddictApplicationManager<OpenIddictApplication>>();
+
+                if (await manager.FindByClientIdAsync("api2") == null)
+                {
+                    var descriptor = new OpenIddictApplicationDescriptor
+                    {
+                        ClientId = "api2",
+                        ClientSecret = "388D45FA-B36B-4988-BA59-B187D329C207",
+                        DisplayName = "My client application",
+
+                        Permissions =
+                        {
+                            OpenIddictConstants.Permissions.GrantTypes.ClientCredentials,
+                            OpenIddictConstants.Permissions.Endpoints.Introspection,
+                            OpenIddictConstants.Permissions.Endpoints.Token
+                        }
+                    };
+
+                    await manager.CreateAsync(descriptor);
+                }
+            }
         }
     }
 }
