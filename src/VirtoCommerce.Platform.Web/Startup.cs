@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -7,6 +8,7 @@ using Hangfire;
 using Hangfire.Common;
 using Hangfire.MemoryStorage;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -19,6 +21,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using VirtoCommerce.Platform.Assets.AzureBlobStorage;
@@ -165,8 +168,28 @@ namespace VirtoCommerce.Platform.Web
                 options.KnownProxies.Clear();
                 options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor;
             });
+                                             
+            JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+            JwtSecurityTokenHandler.DefaultOutboundClaimTypeMap.Clear();
+            services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddJwtBearer(options =>
+                {
+                    //TODO: Add certificate validation if Configuration["Auth:Authority"] is not set
+                    options.Authority = Configuration["Auth:Authority"];
+                    options.Audience = Configuration["Auth:Audience"];
+                    options.RequireHttpsMetadata = false;
+                    options.IncludeErrorDetails = true;
+                    options.TokenValidationParameters = new TokenValidationParameters()
+                    {
+                     
+                        NameClaimType = OpenIdConnectConstants.Claims.Subject,
+                        RoleClaimType = OpenIdConnectConstants.Claims.Role
+                    };
+                });
 
             var azureAdSection = Configuration.GetSection("AzureAd");
+
 
             if (azureAdSection.GetChildren().Any())
             {
@@ -212,7 +235,8 @@ namespace VirtoCommerce.Platform.Web
                     // Note: the Mvc.Client sample only uses the code flow and the password flow, but you
                     // can enable the other flows if you need to support implicit or client credentials.
                     options.AllowPasswordFlow()
-                        .AllowRefreshTokenFlow();
+                        .AllowRefreshTokenFlow()
+                        .AllowClientCredentialsFlow();
 
                     options.SetRefreshTokenLifetime(authorizationOptions?.RefreshTokenLifeTime);
                     options.SetAccessTokenLifetime(authorizationOptions?.AccessTokenLifeTime);
@@ -232,7 +256,6 @@ namespace VirtoCommerce.Platform.Web
                     // an external authentication provider like Google, Facebook or Twitter.
                     options.EnableRequestCaching();
 
-                    options.UseReferenceTokens();
                     options.DisableScopeValidation();
 
                     // During development, you can disable the HTTPS requirement.
@@ -244,10 +267,10 @@ namespace VirtoCommerce.Platform.Web
                     // Note: to use JWT access tokens instead of the default
                     // encrypted format, the following lines are required:
                     //
-                    //options.UseJsonWebTokens();
+                    options.UseJsonWebTokens(); ;
                     //TODO: Replace to X.509 certificate
-                    //options.AddEphemeralSigningKey();
-                }).AddValidation(options => options.UseReferenceTokens());
+                    options.AddDevelopmentSigningCertificate();
+                });
 
             services.Configure<IdentityOptions>(Configuration.GetSection("IdentityOptions"));
 
