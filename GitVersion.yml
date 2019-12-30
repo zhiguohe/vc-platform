@@ -7,7 +7,8 @@ branches:
   develop:
     tag: 'alpha'
   release:
-    tag: 'rc1-update'
+    tag: 'rc2'
+    mode: ContinuousDeployment
 
 ignore:
   sha: []
